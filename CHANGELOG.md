@@ -1,3 +1,7 @@
+## 4.1.0
+
+- Merged PR including Android hybrid composition addition
+
 ## 4.0.0+4
 
 - Reverted calling `handler.post` on Android when a WebView is created
