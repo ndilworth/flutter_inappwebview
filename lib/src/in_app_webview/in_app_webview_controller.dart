@@ -1,14 +1,12 @@
 import 'dart:io';
-import 'dart:async';
 import 'dart:collection';
-import 'dart:typed_data';
 import 'dart:convert';
 import 'dart:core';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/widgets.dart';
 
 import 'android/in_app_webview_controller.dart';
 import 'ios/in_app_webview_controller.dart';
@@ -53,7 +51,10 @@ class InAppWebViewController {
   static MethodChannel _staticChannel = IN_APP_WEBVIEW_STATIC_CHANNEL;
   Map<String, JavaScriptHandlerCallback> javaScriptHandlersMap =
       HashMap<String, JavaScriptHandlerCallback>();
-  List<UserScript> _userScripts = [];
+  final Map<UserScriptInjectionTime, List<UserScript>> _userScripts = {
+    UserScriptInjectionTime.AT_DOCUMENT_START: <UserScript>[],
+    UserScriptInjectionTime.AT_DOCUMENT_END: <UserScript>[]
+  };
   Set<String> _webMessageListenerObjNames = Set();
   Map<String, ScriptHtmlTagAttributes> _injectedScriptsFromURL = {};
 
@@ -77,8 +78,22 @@ class InAppWebViewController {
         MethodChannel('com.pichillilorenzo/flutter_inappwebview_$id');
     this._channel.setMethodCallHandler(handleMethod);
     this._webview = webview;
-    this._userScripts =
-        List<UserScript>.from(webview.initialUserScripts ?? <UserScript>[]);
+
+    final initialUserScripts = webview.initialUserScripts;
+    if (initialUserScripts != null) {
+      for (final userScript in initialUserScripts) {
+        if (userScript.injectionTime ==
+            UserScriptInjectionTime.AT_DOCUMENT_START) {
+          this
+              ._userScripts[UserScriptInjectionTime.AT_DOCUMENT_START]
+              ?.add(userScript);
+        } else {
+          this
+              ._userScripts[UserScriptInjectionTime.AT_DOCUMENT_END]
+              ?.add(userScript);
+        }
+      }
+    }
     this._init();
   }
 
@@ -88,8 +103,22 @@ class InAppWebViewController {
       UnmodifiableListView<UserScript>? initialUserScripts) {
     this._channel = channel;
     this._inAppBrowser = inAppBrowser;
-    this._userScripts =
-        List<UserScript>.from(initialUserScripts ?? <UserScript>[]);
+
+    if (initialUserScripts != null) {
+      for (final userScript in initialUserScripts) {
+        if (userScript.injectionTime ==
+            UserScriptInjectionTime.AT_DOCUMENT_START) {
+          this
+              ._userScripts[UserScriptInjectionTime.AT_DOCUMENT_START]
+              ?.add(userScript);
+        } else {
+          this
+              ._userScripts[UserScriptInjectionTime.AT_DOCUMENT_END]
+              ?.add(userScript);
+        }
+      }
+    }
+
     this._init();
   }
 
@@ -107,7 +136,7 @@ class InAppWebViewController {
         if ((_webview != null && _webview!.onLoadStart != null) ||
             _inAppBrowser != null) {
           String? url = call.arguments["url"];
-          Uri? uri = url != null ? Uri.parse(url) : null;
+          Uri? uri = url != null ? Uri.tryParse(url) : null;
           if (_webview != null && _webview!.onLoadStart != null)
             _webview!.onLoadStart!(this, uri);
           else
@@ -118,7 +147,7 @@ class InAppWebViewController {
         if ((_webview != null && _webview!.onLoadStop != null) ||
             _inAppBrowser != null) {
           String? url = call.arguments["url"];
-          Uri? uri = url != null ? Uri.parse(url) : null;
+          Uri? uri = url != null ? Uri.tryParse(url) : null;
           if (_webview != null && _webview!.onLoadStop != null)
             _webview!.onLoadStop!(this, uri);
           else
@@ -131,7 +160,7 @@ class InAppWebViewController {
           String? url = call.arguments["url"];
           int code = call.arguments["code"];
           String message = call.arguments["message"];
-          Uri? uri = url != null ? Uri.parse(url) : null;
+          Uri? uri = url != null ? Uri.tryParse(url) : null;
           if (_webview != null && _webview!.onLoadError != null)
             _webview!.onLoadError!(this, uri, code, message);
           else
@@ -144,7 +173,7 @@ class InAppWebViewController {
           String? url = call.arguments["url"];
           int statusCode = call.arguments["statusCode"];
           String description = call.arguments["description"];
-          Uri? uri = url != null ? Uri.parse(url) : null;
+          Uri? uri = url != null ? Uri.tryParse(url) : null;
           if (_webview != null && _webview!.onLoadHttpError != null)
             _webview!.onLoadHttpError!(this, uri, statusCode, description);
           else
@@ -231,7 +260,7 @@ class InAppWebViewController {
                 _webview!.onLoadResourceCustomScheme != null) ||
             _inAppBrowser != null) {
           String url = call.arguments["url"];
-          Uri uri = Uri.parse(url);
+          Uri uri = Uri.tryParse(url) ?? Uri();
           if (_webview != null && _webview!.onLoadResourceCustomScheme != null)
             return (await _webview!.onLoadResourceCustomScheme!(this, uri))
                 ?.toMap();
@@ -315,7 +344,7 @@ class InAppWebViewController {
                 _webview!.androidOnRenderProcessUnresponsive != null) ||
             _inAppBrowser != null) {
           String? url = call.arguments["url"];
-          Uri? uri = url != null ? Uri.parse(url) : null;
+          Uri? uri = url != null ? Uri.tryParse(url) : null;
           if (_webview != null &&
               _webview!.androidOnRenderProcessUnresponsive != null)
             return (await _webview!.androidOnRenderProcessUnresponsive!(
@@ -332,7 +361,7 @@ class InAppWebViewController {
                 _webview!.androidOnRenderProcessResponsive != null) ||
             _inAppBrowser != null) {
           String? url = call.arguments["url"];
-          Uri? uri = url != null ? Uri.parse(url) : null;
+          Uri? uri = url != null ? Uri.tryParse(url) : null;
           if (_webview != null &&
               _webview!.androidOnRenderProcessResponsive != null)
             return (await _webview!.androidOnRenderProcessResponsive!(
@@ -362,7 +391,7 @@ class InAppWebViewController {
         if ((_webview != null && _webview!.androidOnFormResubmission != null) ||
             _inAppBrowser != null) {
           String? url = call.arguments["url"];
-          Uri? uri = url != null ? Uri.parse(url) : null;
+          Uri? uri = url != null ? Uri.tryParse(url) : null;
           if (_webview != null && _webview!.androidOnFormResubmission != null)
             return (await _webview!.androidOnFormResubmission!(this, uri))
                 ?.toMap();
@@ -411,7 +440,7 @@ class InAppWebViewController {
             _inAppBrowser != null) {
           String url = call.arguments["url"];
           bool precomposed = call.arguments["precomposed"];
-          Uri uri = Uri.parse(url);
+          Uri uri = Uri.tryParse(url) ?? Uri();
           if (_webview != null &&
               _webview!.androidOnReceivedTouchIconUrl != null)
             _webview!.androidOnReceivedTouchIconUrl!(this, uri, precomposed);
@@ -486,7 +515,7 @@ class InAppWebViewController {
           String url = call.arguments["url"];
           SafeBrowsingThreat? threatType =
               SafeBrowsingThreat.fromValue(call.arguments["threatType"]);
-          Uri uri = Uri.parse(url);
+          Uri uri = Uri.tryParse(url) ?? Uri();
           if (_webview != null && _webview!.androidOnSafeBrowsingHit != null)
             return (await _webview!.androidOnSafeBrowsingHit!(
                     this, uri, threatType))
@@ -601,7 +630,7 @@ class InAppWebViewController {
             _inAppBrowser != null) {
           String? url = call.arguments["url"];
           bool? androidIsReload = call.arguments["androidIsReload"];
-          Uri? uri = url != null ? Uri.parse(url) : null;
+          Uri? uri = url != null ? Uri.tryParse(url) : null;
           if (_webview != null && _webview!.onUpdateVisitedHistory != null)
             _webview!.onUpdateVisitedHistory!(this, uri, androidIsReload);
           else
@@ -619,7 +648,7 @@ class InAppWebViewController {
         if ((_webview != null && _webview!.onPageCommitVisible != null) ||
             _inAppBrowser != null) {
           String? url = call.arguments["url"];
-          Uri? uri = url != null ? Uri.parse(url) : null;
+          Uri? uri = url != null ? Uri.tryParse(url) : null;
           if (_webview != null && _webview!.onPageCommitVisible != null)
             _webview!.onPageCommitVisible!(this, uri);
           else
@@ -865,7 +894,7 @@ class InAppWebViewController {
             if ((_webview != null && _webview!.onPrint != null) ||
                 _inAppBrowser != null) {
               String? url = args[0];
-              Uri? uri = url != null ? Uri.parse(url) : null;
+              Uri? uri = url != null ? Uri.tryParse(url) : null;
               if (_webview != null && _webview!.onPrint != null)
                 _webview!.onPrint!(this, uri);
               else
@@ -925,7 +954,7 @@ class InAppWebViewController {
   Future<Uri?> getUrl() async {
     Map<String, dynamic> args = <String, dynamic>{};
     String? url = await _channel.invokeMethod('getUrl', args);
-    return url != null ? Uri.parse(url) : null;
+    return url != null ? Uri.tryParse(url) : null;
   }
 
   ///Gets the title for the current page.
@@ -1096,13 +1125,18 @@ class InAppWebViewController {
     }
 
     if (manifestFound) {
-      Map<String, dynamic> manifest =
-          json.decode(await manifestResponse!.transform(Utf8Decoder()).join());
-      if (manifest.containsKey("icons")) {
-        for (Map<String, dynamic> icon in manifest["icons"]) {
-          favicons.addAll(_createFavicons(webviewUrl, assetPathBase,
-              icon["src"], icon["rel"], icon["sizes"], true));
+      try {
+        Map<String, dynamic> manifest = json
+            .decode(await manifestResponse!.transform(Utf8Decoder()).join());
+        if (manifest.containsKey("icons")) {
+          for (Map<String, dynamic> icon in manifest["icons"]) {
+            favicons.addAll(_createFavicons(webviewUrl, assetPathBase,
+                icon["src"], icon["rel"], icon["sizes"], true));
+          }
         }
+      } on FormatException catch (_) {
+        /// The [manifestResponse] might not has a valid JSON string, catch and
+        /// ignore the error
       }
     }
 
@@ -1141,11 +1175,17 @@ class InAppWebViewController {
         int width = int.parse(size.split("x")[0]);
         int height = int.parse(size.split("x")[1]);
         favicons.add(Favicon(
-            url: Uri.parse(urlIcon), rel: rel, width: width, height: height));
+            url: Uri.tryParse(urlIcon) ?? Uri(),
+            rel: rel,
+            width: width,
+            height: height));
       }
     } else {
       favicons.add(Favicon(
-          url: Uri.parse(urlIcon), rel: rel, width: null, height: null));
+          url: Uri.tryParse(urlIcon) ?? Uri(),
+          rel: rel,
+          width: null,
+          height: null));
     }
 
     return favicons;
@@ -1860,7 +1900,7 @@ class InAppWebViewController {
   Future<Uri?> getOriginalUrl() async {
     Map<String, dynamic> args = <String, dynamic>{};
     String? url = await _channel.invokeMethod('getOriginalUrl', args);
-    return url != null ? Uri.parse(url) : null;
+    return url != null ? Uri.tryParse(url) : null;
   }
 
   ///Gets the current zoom scale of the WebView.
@@ -1949,7 +1989,7 @@ class InAppWebViewController {
         await _channel.invokeMethod('requestFocusNodeHref', args);
     return result != null
         ? RequestFocusNodeHrefResult(
-            url: result['url'] != null ? Uri.parse(result['url']) : null,
+            url: result['url'] != null ? Uri.tryParse(result['url']) : null,
             title: result['title'],
             src: result['src'],
           )
@@ -1969,7 +2009,7 @@ class InAppWebViewController {
         await _channel.invokeMethod('requestImageRef', args);
     return result != null
         ? RequestImageRefResult(
-            url: result['url'] != null ? Uri.parse(result['url']) : null,
+            url: result['url'] != null ? Uri.tryParse(result['url']) : null,
           )
         : null;
   }
@@ -2108,8 +2148,9 @@ class InAppWebViewController {
 
     Map<String, dynamic> args = <String, dynamic>{};
     args.putIfAbsent('userScript', () => userScript.toMap());
-    if (!_userScripts.contains(userScript)) {
-      _userScripts.add(userScript);
+    if (!(_userScripts[userScript.injectionTime]?.contains(userScript) ??
+        false)) {
+      _userScripts[userScript.injectionTime]?.add(userScript);
       await _channel.invokeMethod('addUserScript', args);
     }
   }
@@ -2139,12 +2180,12 @@ class InAppWebViewController {
     assert(_webview?.windowId == null ||
         defaultTargetPlatform != TargetPlatform.iOS);
 
-    var index = _userScripts.indexOf(userScript);
-    if (index == -1) {
+    var index = _userScripts[userScript.injectionTime]?.indexOf(userScript);
+    if (index == null || index == -1) {
       return false;
     }
 
-    _userScripts.remove(userScript);
+    _userScripts[userScript.injectionTime]?.remove(userScript);
     Map<String, dynamic> args = <String, dynamic>{};
     args.putIfAbsent('userScript', () => userScript.toMap());
     args.putIfAbsent('index', () => index);
@@ -2163,6 +2204,22 @@ class InAppWebViewController {
     assert(_webview?.windowId == null ||
         defaultTargetPlatform != TargetPlatform.iOS);
 
+    final List<UserScript> userScriptsAtDocumentStart = List.from(
+        _userScripts[UserScriptInjectionTime.AT_DOCUMENT_START] ?? []);
+    for (final userScript in userScriptsAtDocumentStart) {
+      if (userScript.groupName == groupName) {
+        _userScripts[userScript.injectionTime]?.remove(userScript);
+      }
+    }
+
+    final List<UserScript> userScriptsAtDocumentEnd =
+        List.from(_userScripts[UserScriptInjectionTime.AT_DOCUMENT_END] ?? []);
+    for (final userScript in userScriptsAtDocumentEnd) {
+      if (userScript.groupName == groupName) {
+        _userScripts[userScript.injectionTime]?.remove(userScript);
+      }
+    }
+
     Map<String, dynamic> args = <String, dynamic>{};
     args.putIfAbsent('groupName', () => groupName);
     await _channel.invokeMethod('removeUserScriptsByGroupName', args);
@@ -2179,8 +2236,8 @@ class InAppWebViewController {
     assert(_webview?.windowId == null ||
         defaultTargetPlatform != TargetPlatform.iOS);
 
-    for (var i = 0; i < userScripts.length; i++) {
-      await removeUserScript(userScript: userScripts[i]);
+    for (final userScript in userScripts) {
+      await removeUserScript(userScript: userScript);
     }
   }
 
@@ -2195,7 +2252,9 @@ class InAppWebViewController {
     assert(_webview?.windowId == null ||
         defaultTargetPlatform != TargetPlatform.iOS);
 
-    _userScripts.clear();
+    _userScripts[UserScriptInjectionTime.AT_DOCUMENT_START]?.clear();
+    _userScripts[UserScriptInjectionTime.AT_DOCUMENT_END]?.clear();
+
     Map<String, dynamic> args = <String, dynamic>{};
     await _channel.invokeMethod('removeAllUserScripts', args);
   }
@@ -2218,7 +2277,7 @@ class InAppWebViewController {
   ///This parameter doesn’t apply to changes you make to the underlying web content, such as the document’s DOM structure.
   ///Those changes remain visible to all scripts, regardless of which content world you specify.
   ///For more information about content worlds, see [ContentWorld].
-  ///Available on iOS 14.0+.
+  ///Available on iOS 14.3+.
   ///
   ///**NOTE**: This method shouldn't be called in the [WebView.onWebViewCreated] or [WebView.onLoadStart] events,
   ///because, in these events, the [WebView] is not ready to handle it yet.
@@ -2324,7 +2383,7 @@ class InAppWebViewController {
   Future<void> postWebMessage(
       {required WebMessage message, Uri? targetOrigin}) async {
     if (targetOrigin == null) {
-      targetOrigin = Uri.parse("");
+      targetOrigin = Uri();
     }
     Map<String, dynamic> args = <String, dynamic>{};
     args.putIfAbsent('message', () => message.toMap());

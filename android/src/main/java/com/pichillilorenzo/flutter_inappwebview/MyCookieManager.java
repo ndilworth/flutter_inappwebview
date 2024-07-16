@@ -32,11 +32,18 @@ public class MyCookieManager implements MethodChannel.MethodCallHandler {
     this.plugin = plugin;
     channel = new MethodChannel(plugin.messenger, "com.pichillilorenzo/flutter_inappwebview_cookiemanager");
     channel.setMethodCallHandler(this);
-    cookieManager = getCookieManager();
+  }
+
+  public static void init() {
+    if (cookieManager == null) {
+      cookieManager = getCookieManager();
+    }
   }
 
   @Override
   public void onMethodCall(MethodCall call, MethodChannel.Result result) {
+    init();
+
     switch (call.method) {
       case "setCookie":
         {
@@ -140,7 +147,10 @@ public class MyCookieManager implements MethodChannel.MethodCallHandler {
     cookieManager = getCookieManager();
     if (cookieManager == null) return;
 
-    String cookieValue = name + "=" + value + "; Domain=" + domain + "; Path=" + path;
+    String cookieValue = name + "=" + value + "; Path=" + path;
+
+    if (domain != null)
+      cookieValue += "; Domain=" + domain;
 
     if (expiresDate != null)
       cookieValue += "; Expires=" + getCookieExpirationDate(expiresDate);
@@ -168,13 +178,16 @@ public class MyCookieManager implements MethodChannel.MethodCallHandler {
       });
       cookieManager.flush();
     }
-    else {
+    else if (plugin != null) {
       CookieSyncManager cookieSyncMngr = CookieSyncManager.createInstance(plugin.applicationContext);
       cookieSyncMngr.startSync();
       cookieManager.setCookie(url, cookieValue);
       result.success(true);
       cookieSyncMngr.stopSync();
       cookieSyncMngr.sync();
+    } else {
+      cookieManager.setCookie(url, cookieValue);
+      result.success(true);
     }
   }
 
@@ -215,7 +228,12 @@ public class MyCookieManager implements MethodChannel.MethodCallHandler {
     cookieManager = getCookieManager();
     if (cookieManager == null) return;
 
-    String cookieValue = name + "=; Path=" + path + "; Domain=" + domain + "; Max-Age=-1;";
+    String cookieValue = name + "=; Path=" + path + "; Max-Age=-1";
+
+    if (domain != null)
+      cookieValue += "; Domain=" + domain;
+
+    cookieValue += ";";
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
       cookieManager.setCookie(url, cookieValue, new ValueCallback<Boolean>() {
@@ -226,13 +244,16 @@ public class MyCookieManager implements MethodChannel.MethodCallHandler {
       });
       cookieManager.flush();
     }
-    else {
+    else if (plugin != null) {
       CookieSyncManager cookieSyncMngr = CookieSyncManager.createInstance(plugin.applicationContext);
       cookieSyncMngr.startSync();
       cookieManager.setCookie(url, cookieValue);
       result.success(true);
       cookieSyncMngr.stopSync();
       cookieSyncMngr.sync();
+    } else {
+      cookieManager.setCookie(url, cookieValue);
+      result.success(true);
     }
   }
 
@@ -245,7 +266,7 @@ public class MyCookieManager implements MethodChannel.MethodCallHandler {
     String cookiesString = cookieManager.getCookie(url);
     if (cookiesString != null) {
 
-      if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+      if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP && plugin != null) {
         cookieSyncMngr = CookieSyncManager.createInstance(plugin.applicationContext);
         cookieSyncMngr.startSync();
       }
@@ -254,7 +275,14 @@ public class MyCookieManager implements MethodChannel.MethodCallHandler {
       for (String cookie : cookies) {
         String[] nameValue = cookie.split("=", 2);
         String name = nameValue[0].trim();
-        String cookieValue = name + "=; Path=" + path + "; Domain=" + domain + "; Max-Age=-1;";
+
+        String cookieValue = name + "=; Path=" + path + "; Max-Age=-1";
+
+        if (domain != null)
+          cookieValue += "; Domain=" + domain;
+
+        cookieValue += ";";
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP)
           cookieManager.setCookie(url, cookieValue, null);
         else
@@ -283,13 +311,16 @@ public class MyCookieManager implements MethodChannel.MethodCallHandler {
       });
       cookieManager.flush();
     }
-    else {
+    else if (plugin != null) {
       CookieSyncManager cookieSyncMngr = CookieSyncManager.createInstance(plugin.applicationContext);
       cookieSyncMngr.startSync();
       cookieManager.removeAllCookie();
       result.success(true);
       cookieSyncMngr.stopSync();
       cookieSyncMngr.sync();
+    } else {
+      cookieManager.removeAllCookie();
+      result.success(true);
     }
   }
 

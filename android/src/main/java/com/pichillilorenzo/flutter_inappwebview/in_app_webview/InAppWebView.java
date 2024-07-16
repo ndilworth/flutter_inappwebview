@@ -97,7 +97,6 @@ import java.util.UUID;
 import java.util.regex.Pattern;
 
 import io.flutter.plugin.common.MethodChannel;
-import okhttp3.OkHttpClient;
 
 import static android.content.Context.INPUT_METHOD_SERVICE;
 import static com.pichillilorenzo.flutter_inappwebview.types.PreferredContentModeOptionType.fromValue;
@@ -121,9 +120,7 @@ final public class InAppWebView extends InputAwareWebView implements InAppWebVie
   public JavaScriptBridgeInterface javaScriptBridgeInterface;
   public InAppWebViewOptions options;
   public boolean isLoading = false;
-  public OkHttpClient httpClient;
   public float zoomScale = 1.0f;
-  int okHttpClientCacheSize = 10 * 1024 * 1024; // 10MB
   public ContentBlockerHandler contentBlockerHandler = new ContentBlockerHandler();
   public Pattern regexToCancelSubFramesLoadingCompiled;
   @Nullable
@@ -181,9 +178,6 @@ final public class InAppWebView extends InputAwareWebView implements InAppWebVie
   }
 
   public void prepare() {
-
-    httpClient = new OkHttpClient().newBuilder().build();
-
     javaScriptBridgeInterface = new JavaScriptBridgeInterface(this);
     addJavascriptInterface(javaScriptBridgeInterface, JavaScriptBridgeJS.JAVASCRIPT_BRIDGE_NAME);
 
@@ -276,8 +270,11 @@ final public class InAppWebView extends InputAwareWebView implements InAppWebVie
     settings.setAllowFileAccessFromFileURLs(options.allowFileAccessFromFileURLs);
     settings.setAllowUniversalAccessFromFileURLs(options.allowUniversalAccessFromFileURLs);
     setCacheEnabled(options.cacheEnabled);
-    if (options.appCachePath != null && !options.appCachePath.isEmpty() && options.cacheEnabled)
-      settings.setAppCachePath(options.appCachePath);
+    if (options.appCachePath != null && !options.appCachePath.isEmpty() && options.cacheEnabled) {
+      // removed from Android API 33+ (https://developer.android.com/sdk/api_diff/33/changes)
+      // settings.setAppCachePath(options.appCachePath);
+      Util.invokeMethodIfExists(settings, "setAppCachePath", options.appCachePath);
+    }
     settings.setBlockNetworkImage(options.blockNetworkImage);
     settings.setBlockNetworkLoads(options.blockNetworkLoads);
     if (options.cacheMode != null)
@@ -357,10 +354,6 @@ final public class InAppWebView extends InputAwareWebView implements InAppWebVie
       setRendererPriorityPolicy(
               (int) options.rendererPriorityPolicy.get("rendererRequestedPriority"),
               (boolean) options.rendererPriorityPolicy.get("waivedWhenNotVisible"));
-    } else if ((options.rendererPriorityPolicy == null || (options.rendererPriorityPolicy != null && options.rendererPriorityPolicy.isEmpty())) &&
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-      options.rendererPriorityPolicy.put("rendererRequestedPriority", getRendererRequestedPriority());
-      options.rendererPriorityPolicy.put("waivedWhenNotVisible", getRendererPriorityWaivedWhenNotVisible());
     }
 
     contentBlockerHandler.getRuleList().clear();
@@ -491,7 +484,11 @@ final public class InAppWebView extends InputAwareWebView implements InAppWebVie
 
       // Disable caching
       settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
-      settings.setAppCacheEnabled(false);
+
+      // removed from Android API 33+ (https://developer.android.com/sdk/api_diff/33/changes)
+      // settings.setAppCacheEnabled(false);
+      Util.invokeMethodIfExists(settings, "setAppCacheEnabled", false);
+
       clearHistory();
       clearCache(true);
 
@@ -501,7 +498,11 @@ final public class InAppWebView extends InputAwareWebView implements InAppWebVie
       settings.setSaveFormData(false);
     } else {
       settings.setCacheMode(WebSettings.LOAD_DEFAULT);
-      settings.setAppCacheEnabled(true);
+
+      // removed from Android API 33+ (https://developer.android.com/sdk/api_diff/33/changes)
+      // settings.setAppCacheEnabled(true);
+      Util.invokeMethodIfExists(settings, "setAppCacheEnabled", true);
+
       settings.setSavePassword(true);
       settings.setSaveFormData(true);
     }
@@ -512,13 +513,22 @@ final public class InAppWebView extends InputAwareWebView implements InAppWebVie
     if (enabled) {
       Context ctx = getContext();
       if (ctx != null) {
-        settings.setAppCachePath(ctx.getCacheDir().getAbsolutePath());
+        // removed from Android API 33+ (https://developer.android.com/sdk/api_diff/33/changes)
+        // settings.setAppCachePath(ctx.getCacheDir().getAbsolutePath());
+        Util.invokeMethodIfExists(settings, "setAppCachePath", ctx.getCacheDir().getAbsolutePath());
+
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
-        settings.setAppCacheEnabled(true);
+
+        // removed from Android API 33+ (https://developer.android.com/sdk/api_diff/33/changes)
+        // settings.setAppCacheEnabled(true);
+        Util.invokeMethodIfExists(settings, "setAppCacheEnabled", true);
       }
     } else {
       settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
-      settings.setAppCacheEnabled(false);
+
+      // removed from Android API 33+ (https://developer.android.com/sdk/api_diff/33/changes)
+      // settings.setAppCacheEnabled(false);
+      Util.invokeMethodIfExists(settings, "setAppCacheEnabled", false);
     }
   }
 
@@ -763,8 +773,11 @@ final public class InAppWebView extends InputAwareWebView implements InAppWebVie
     if (newOptionsMap.get("cacheEnabled") != null && options.cacheEnabled != newOptions.cacheEnabled)
       setCacheEnabled(newOptions.cacheEnabled);
 
-    if (newOptionsMap.get("appCachePath") != null && (options.appCachePath == null || !options.appCachePath.equals(newOptions.appCachePath)))
-      settings.setAppCachePath(newOptions.appCachePath);
+    if (newOptionsMap.get("appCachePath") != null && (options.appCachePath == null || !options.appCachePath.equals(newOptions.appCachePath))) {
+      // removed from Android API 33+ (https://developer.android.com/sdk/api_diff/33/changes)
+      // settings.setAppCachePath(newOptions.appCachePath);
+      Util.invokeMethodIfExists(settings, "setAppCachePath", newOptions.appCachePath);
+    }
 
     if (newOptionsMap.get("blockNetworkImage") != null && options.blockNetworkImage != newOptions.blockNetworkImage)
       settings.setBlockNetworkImage(newOptions.blockNetworkImage);
@@ -916,9 +929,9 @@ final public class InAppWebView extends InputAwareWebView implements InAppWebVie
     if (newOptionsMap.get("networkAvailable") != null && options.networkAvailable != newOptions.networkAvailable)
       setNetworkAvailable(newOptions.networkAvailable);
 
-    if (newOptionsMap.get("rendererPriorityPolicy") != null &&
+    if (newOptionsMap.get("rendererPriorityPolicy") != null && (options.rendererPriorityPolicy == null ||
             (options.rendererPriorityPolicy.get("rendererRequestedPriority") != newOptions.rendererPriorityPolicy.get("rendererRequestedPriority") ||
-                    options.rendererPriorityPolicy.get("waivedWhenNotVisible") != newOptions.rendererPriorityPolicy.get("waivedWhenNotVisible")) &&
+                    options.rendererPriorityPolicy.get("waivedWhenNotVisible") != newOptions.rendererPriorityPolicy.get("waivedWhenNotVisible"))) &&
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
       setRendererPriorityPolicy(
               (int) newOptions.rendererPriorityPolicy.get("rendererRequestedPriority"),

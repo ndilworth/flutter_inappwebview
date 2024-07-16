@@ -36,15 +36,18 @@ public class ServiceWorkerManager implements MethodChannel.MethodCallHandler {
     this.plugin = plugin;
     channel = new MethodChannel(plugin.messenger, "com.pichillilorenzo/flutter_inappwebview_android_serviceworkercontroller");
     channel.setMethodCallHandler(this);
-    if (WebViewFeature.isFeatureSupported(WebViewFeature.SERVICE_WORKER_BASIC_USAGE)) {
+  }
+
+  public static void init() {
+    if (serviceWorkerController == null &&
+            WebViewFeature.isFeatureSupported(WebViewFeature.SERVICE_WORKER_BASIC_USAGE)) {
       serviceWorkerController = ServiceWorkerControllerCompat.getInstance();
-    } else {
-      serviceWorkerController = null;
     }
   }
 
   @Override
   public void onMethodCall(MethodCall call, MethodChannel.Result result) {
+    init();
     ServiceWorkerWebSettingsCompat serviceWorkerWebSettings = (serviceWorkerController != null) ? serviceWorkerController.getServiceWorkerWebSettings() : null;
 
     switch (call.method) {
@@ -168,13 +171,7 @@ public class ServiceWorkerManager implements MethodChannel.MethodCallHandler {
   }
 
   private ServiceWorkerClientCompat dummyServiceWorkerClientCompat() {
-    return new ServiceWorkerClientCompat() {
-      @Nullable
-      @Override
-      public WebResourceResponse shouldInterceptRequest(@NonNull WebResourceRequest request) {
-        return null;
-      }
-    };
+    return DummyServiceWorkerClientCompat.INSTANCE;
   }
 
   public void dispose() {
@@ -184,5 +181,15 @@ public class ServiceWorkerManager implements MethodChannel.MethodCallHandler {
       serviceWorkerController = null; 
     }
     plugin = null;
+  }
+
+  private static final class DummyServiceWorkerClientCompat extends ServiceWorkerClientCompat {
+    static final ServiceWorkerClientCompat INSTANCE = new DummyServiceWorkerClientCompat();
+
+    @Nullable
+    @Override
+    public WebResourceResponse shouldInterceptRequest(@NonNull WebResourceRequest request) {
+      return null;
+    }
   }
 }
